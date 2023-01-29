@@ -12,18 +12,11 @@ class TranslationsExporter
 {
     public const APP_BUNDLE_NAME = 'app';
 
-    private LoadTranslationService $loadTranslationService;
-    private ReporterService $reporterService;
-    private KernelInterface $kernel;
-
     public function __construct(
-        LoadTranslationService $loadTranslationService,
-        ReporterService $reporterService,
-        KernelInterface $kernel
+        private LoadTranslationService $loadTranslationService,
+        private ReporterService $reporterService,
+        private KernelInterface $kernel,
     ) {
-        $this->loadTranslationService = $loadTranslationService;
-        $this->reporterService   = $reporterService;
-        $this->kernel = $kernel;
     }
 
     public function export(ExportSettingsModel $exportSettingsModel): void

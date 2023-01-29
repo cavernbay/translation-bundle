@@ -14,7 +14,7 @@ use Symfony\Component\Yaml\Dumper;
 class TranslationsImporter
 {
     public function __construct(
-        private Kernel $kernel,
+        private KernelInterface $kernel,
         private LoadTranslationService $loadTranslationService,
         private Filesystem $filesystem,
         private Dumper $dumper,
