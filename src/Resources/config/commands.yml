@@ -1,11 +1,4 @@
 services:
-    _defaults:
-        autowire: true
-        autoconfigure: true
-        bind:
-            $rootDir: '%kernel.project_dir%'
-            $translationPath: '%translator.default_path%'
-
     cavern_bay.translation.command.export:
         class: CavernBay\TranslationBundle\Command\ExportCommand
 
