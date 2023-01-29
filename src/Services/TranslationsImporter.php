@@ -8,7 +8,7 @@ use CavernBay\TranslationBundle\Components\CsvLoader;
 use CavernBay\TranslationBundle\Model\ImportSettingsModel;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpKernel\Bundle\BundleInterface;
-use Symfony\Component\HttpKernel\Kernel;
+use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\Yaml\Dumper;
 
 class TranslationsImporter
