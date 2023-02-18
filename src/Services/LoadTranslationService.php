@@ -69,6 +69,8 @@ class LoadTranslationService
         $path = $this->getAppTranslationsPath();
         $finder = $this->findTranslationsFiles($path, $locales, $domains, false);
         $this->loadTranslationFiles('app', $finder);
+
+        return $finder;
     }
 
     /**
@@ -80,13 +82,17 @@ class LoadTranslationService
      */
     public function loadBundlesTranslationFiles(array $bundles, array $locales, array $domains)
     {
+        $finder = new Finder();
+        $finder->append([]);
         if (isset($bundles['app'])) {
-            $this->loadAppTranslationFiles($locales, $domains);
+            $files = $this->loadAppTranslationFiles($locales, $domains);
+            $finder->append($files);
         }
 
         foreach ($bundles as $bundleName => $bundle) {
             if ('app' !== $bundleName) {
-                $this->loadBundleTranslationFiles($bundle, $locales, $domains);
+                $files = $this->loadBundleTranslationFiles($bundle, $locales, $domains);
+                $finder->append($files);
             }
         }
     }
@@ -103,6 +109,8 @@ class LoadTranslationService
         $path = $bundle->getPath();
         $finder = $this->findTranslationsFiles($path, $locales, $domains);
         $this->loadTranslationFiles($bundle->getName(), $finder);
+
+        return $finder;
     }
 
     /**
@@ -117,24 +125,23 @@ class LoadTranslationService
      */
     protected function findTranslationsFiles(string $path, array $locales, array $domains, bool $autocompletePath = true)
     {
-        $finder = null;
+        $finder = new Finder();
         if (preg_match('#^win#i', PHP_OS)) {
             $path = preg_replace('#'.preg_quote(DIRECTORY_SEPARATOR, '#').'#', '/', $path);
         }
+        $dir = $path;
         if (true === $autocompletePath) {
             $dir = (0 === strpos($path, $this->rootDir.'/Resources')) ? $path : $path.'/Resources/translations';
-        } else {
-            $dir = $path;
         }
-        exec('ls -l '.$dir);
         if (is_dir($dir)) {
-            $finder = new Finder();
             $finder->files()
                 ->name($this->getFileNamePattern($locales, $domains))
                 ->in($dir);
+        } else {
+            $finder->append([]);
         }
 
-        return (null !== $finder && $finder->count() > 0) ? $finder : null;
+        return $finder;
     }
 
     /**
@@ -148,11 +155,13 @@ class LoadTranslationService
         if (!$finder instanceof Finder) {
             return;
         }
-        foreach ($finder as $file) {
-            list($domain, $locale, $extension) = explode('.', $file->getFilename());
+        try {
+            foreach ($finder as $file) {
+                list($domain, $locale, $extension) = explode('.', $file->getFilename());
 
-            $this->loadTranslationFile($file, $bundleName, $domain, $locale);
-        }
+                $this->loadTranslationFile($file, $bundleName, $domain, $locale);
+            }
+        } catch (\LogicException) {}
     }
 
     /**
@@ -200,6 +209,9 @@ class LoadTranslationService
      */
     protected function getFileNamePattern(array $locales, array $domains)
     {
+        if ($locales === ['all']) {
+            $locales = ['.*'];
+        }
         if (count($domains) > 1) {
             $regex = sprintf('/((%s)\.(%s)\.(%s))/', implode('|', $domains), implode('|', $locales), implode('|', ['yml', 'yaml']));
         } elseif ($domains[0] == 'all') {

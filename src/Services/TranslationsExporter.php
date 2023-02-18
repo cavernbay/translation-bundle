@@ -7,6 +7,7 @@ namespace CavernBay\TranslationBundle\Services;
 use CavernBay\TranslationBundle\Model\ExportSettingsModel;
 use League\Csv\Writer;
 use Symfony\Component\HttpKernel\KernelInterface;
+use Symfony\Component\Finder\Finder;
 
 class TranslationsExporter
 {
@@ -23,29 +24,39 @@ class TranslationsExporter
     {
         $bundlesNames = $exportSettingsModel->getBundles();
 
-        $this->loadBundlesTranslations($bundlesNames, $exportSettingsModel);
-        $this->exportTranslationsToFile($exportSettingsModel);
+        $files = $this->loadBundlesTranslations($bundlesNames, $exportSettingsModel);
+        $this->exportTranslationsToFile($exportSettingsModel, $files);
     }
 
-    protected function loadBundlesTranslations(array $bundles, ExportSettingsModel $exportSettingsModel): void
+    protected function loadBundlesTranslations(array $bundles, ExportSettingsModel $exportSettingsModel): Finder
     {
+        $finder = new Finder();
         foreach ($bundles as $bundle) {
             // fix symfony 4 applications (use magic bundle name "app")
             if (static::APP_BUNDLE_NAME === $bundle) {
-                $this->loadAppTranslations($exportSettingsModel);
+                $files = $this->loadAppTranslations($exportSettingsModel);
+                $finder->append($files);
                 continue;
             }
 
             if ('all' === $bundle) {
-                $this->loadBundlesTranslations($this->kernel->getBundles(), $exportSettingsModel);
+                $files = $this->loadAppTranslations($exportSettingsModel);
+                $finder->append($files);
+                $files = $this->loadBundlesTranslations($this->kernel->getBundles(), $exportSettingsModel);
+                $finder->append($files);
+                continue;
             }
 
-            $this->loadBundleTranslations($bundle, $exportSettingsModel);
+            $files = $this->loadBundleTranslations($bundle, $exportSettingsModel);
+            $finder->append($files);
         }
+
+        return $finder;
     }
 
-    protected function loadBundleTranslations($bundle, ExportSettingsModel $exportSettingsModel): void
+    protected function loadBundleTranslations($bundle, ExportSettingsModel $exportSettingsModel): Finder
     {
+        $finder = new Finder();
         if (is_string($bundle)) {
             $bundle = $this->kernel->getBundle($bundle);
         }
@@ -60,35 +71,60 @@ class TranslationsExporter
         }
 
         // locales to export
-        $this->loadTranslationService->loadBundleTranslationFiles(
+        $files = $this->loadTranslationService->loadBundleTranslationFiles(
             $bundle,
             $exportSettingsModel->getLocales(),
             $exportSettingsModel->getDomains()
         );
+        if ($files !== null) {
+            $finder->append($files);
+        }
         // locale reference
-        $this->loadTranslationService->loadBundleTranslationFiles(
+        $files = $this->loadTranslationService->loadBundleTranslationFiles(
             $bundle,
             [$exportSettingsModel->getLocale()],
             $exportSettingsModel->getDomains()
         );
+        if ($files !== null) {
+            $finder->append($files);
+        }
+
+        return $finder;
     }
 
-    protected function loadAppTranslations(ExportSettingsModel $exportSettingsModel): void
+    protected function loadAppTranslations(ExportSettingsModel $exportSettingsModel): Finder
     {
-        $this->loadTranslationService->loadAppTranslationFiles(
+        $finder = new Finder();
+        $files = $this->loadTranslationService->loadAppTranslationFiles(
             $exportSettingsModel->getLocales(),
             $exportSettingsModel->getDomains()
         );
+        $finder->append($files);
         // locale reference
-        $this->loadTranslationService->loadAppTranslationFiles(
+        $files = $this->loadTranslationService->loadAppTranslationFiles(
             [$exportSettingsModel->getLocale()],
             $exportSettingsModel->getDomains()
         );
+        $finder->append($files);
+
+        return $finder;
     }
 
-    protected function exportTranslationsToFile(ExportSettingsModel $exportSettingsModel): void
+    protected function exportTranslationsToFile(ExportSettingsModel $exportSettingsModel, Finder $files): void
     {
-        $locales = [$exportSettingsModel->getLocale(), ...$exportSettingsModel->getLocales()];
+        $locales = [];
+        if ($exportSettingsModel->getLocales() === ['all']) {
+            try {
+                foreach ($files as $file) {
+                    [, $locale] = explode('.', $file->getFilename());
+                    $locales[] = $locale;
+                }
+            } catch (\LogicException) {}
+        } else {
+            $locales = $exportSettingsModel->getLocales();
+        }
+
+        $locales = [$exportSettingsModel->getLocale(), ...array_diff($locales, [$exportSettingsModel->getLocale()])];
 
         $writer = Writer::createFromPath($exportSettingsModel->getFileName(), 'w+');
         if ($exportSettingsModel->isIncludeUTF8Bom()) {

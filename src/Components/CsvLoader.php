@@ -3,6 +3,7 @@
 namespace CavernBay\TranslationBundle\Components;
 
 use CavernBay\TranslationBundle\Exception\DataException;
+use League\Csv\Reader;
 use Symfony\Component\Filesystem\Exception\FileNotFoundException;
 use Symfony\Component\Filesystem\Exception\IOException;
 use Symfony\Component\Translation\Loader\FileLoader;
@@ -32,58 +33,46 @@ class CsvLoader
             throw new FileNotFoundException(sprintf('File "%s" not found.', $filepath));
         }
 
-        $lines = @file($filepath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $reader = Reader::createFromPath($filepath);
+        $reader->setHeaderOffset(0);
+        $reader->setDelimiter($separator);
 
-        if (false === $lines) {
+        if (false === $reader) {
             throw new IOException('Error loading "%s".', $filepath);
         }
 
         $localesKeys = [];
-        $columnsKeys = null;
+        $columnsKeys = $reader->getHeader();
+
+        foreach (['Bundle', 'Domain', 'Key'] as $mandatoryColumn) {
+            if (!in_array($mandatoryColumn, $columnsKeys)) {
+                throw new DataException('mandatory column '.$mandatoryColumn.' is missing');
+            }
+        }
+        foreach ($locales as $locale) {
+            $localeKey = array_search($locale, $columnsKeys);
+            if ($localeKey === false) {
+                throw new DataException('locale column '.$locale.' is missing');
+            }
+            // keep column id
+            $localesKeys[$locale] = $localeKey;
+        }
 
         $translations = [];
 
-        foreach ($lines as $lineId => $line) {
-            $row = explode($separator, $line);
-            // detect columns names
-            if (is_null($columnsKeys)) {
-                $columnsKeys = [];
-                foreach ($row as $key => $columnName) {
-                    $columnsKeys[$columnName] = $key;
-                }
-
-                // check mandatory columns
-                foreach (['Bundle', 'Domain', 'Key'] as $mandatoryColumn) {
-                    if (!in_array($mandatoryColumn, $row)) {
-                        throw new DataException('mandatory column '.$mandatoryColumn.' is missing');
-                    }
-                }
-                // check wanted locales
-                foreach ($locales as $locale) {
-                    $localeKey = array_search($locale, $row);
-                    if ($localeKey === false) {
-                        throw new DataException('locale column '.$locale.' is missing');
-                    }
-                    // keep column id
-                    $localesKeys[$locale] = $localeKey;
-                }
-            } // keep in memory translations
-            else {
-                $bundleName = $row[$columnsKeys['Bundle']];
-                $domainName = $row[$columnsKeys['Domain']];
-                if (in_array($bundleName, $bundles) || count($bundles) == 1 && $bundles[0] == 'all') {
-                    if (in_array($domainName, $domains) || count($domains) == 1 && $domains[0] == 'all') {
-                        foreach ($locales as $locale) {
-                            // replace new line unescaped by reald newline (works good wy yaml dumper)
-                            if (!isset($row[$localesKeys[$locale]])) {
-                                throw new DataException('missing column value on line '.$lineId.', column '.$localesKeys[$locale]);
-                            }
-                            $value = str_replace('\n', "\n", $row[$localesKeys[$locale]]);
-                            // keep only non blank translations
-                            if ($value) {
-                                // bundle / domain / key
-                                $translations[$bundleName][$domainName][$row[$columnsKeys['Key']]][$locale] = $value;
-                            }
+        foreach ($reader->getIterator() as $lineId => $row) {
+            $bundleName = $row['Bundle'];
+            $domainName = $row['Domain'];
+            if (in_array($bundleName, $bundles) || count($bundles) == 1 && $bundles[0] == 'all') {
+                if (in_array($domainName, $domains) || count($domains) == 1 && $domains[0] == 'all') {
+                    foreach ($locales as $locale) {
+                        if (!isset($row[$locale])) {
+                            throw new DataException('missing column value on line '.$lineId.', column '.$localesKeys[$locale]);
+                        }
+                        $value = str_replace('\n', "\n", $row[$locale]);
+                        if ($value) {
+                            // bundle / domain / key
+                            $translations[$bundleName][$domainName][$row['Key']][$locale] = $value;
                         }
                     }
                 }

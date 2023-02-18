@@ -28,7 +28,7 @@ class ExportSettingsModelFactory
     {
         $model = new ExportSettingsModel();
         $model->setBundles(['all']);
-        $model->setLocale('en_US'); // TODO: use default configured locale if possible
+        $model->setLocale('en'); // TODO: use default configured locale if possible
         $model->setLocales(['all']);
         $model->setDomains(['all']);
         $model->setSeparator($separator);
